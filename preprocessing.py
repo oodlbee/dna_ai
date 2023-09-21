@@ -99,8 +99,8 @@ def make_dataset(masked_sequence, target_mask, target_slices, non_tarter_slices)
         data_slice = np.insert(data_slice, 0, 0) 
         data_slice = np.insert(data_slice, len(data_slice), 0)
         difference = np.diff(data_slice.astype('int'))
-        start = np.where(difference == 1)[0]
-        end = np.where(difference == -1)[0]
+        start = np.where(difference == 1)[0] + left
+        end = np.where(difference == -1)[0] + left
         count_target = len(start)
         df.loc[len(df)] = [masked_sequence[left:right], True, target_mask[left:right], count_target, start, end]
 
@@ -130,5 +130,5 @@ if __name__ == '__main__':
     masked_sequence = make_masked_sequence(gen_data.seq)
     df = make_dataset(masked_sequence, target_mask, target_slices, non_target_slices)
 
-    df.to_csv(dir_save, index=False)
+    df.to_pickle(dir_save)
 
