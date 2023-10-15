@@ -7,6 +7,7 @@ from BCBio import GFF
 
 
 def read_data(dir_fasta, dir_gff, source):
+    """Считывает данные с файла fasta и gff, соединяет последоваетльность и инфу по ней в gen_data"""
     with open(dir_fasta) as file:
         seq_dict = SeqIO.to_dict(SeqIO.parse(file, "fasta"))
 
@@ -20,6 +21,10 @@ def read_data(dir_fasta, dir_gff, source):
          
         
 def second_model_target_mask(gen_data, target:str):
+    """По данным из gen_data создает массив-маску последовательности, 
+    где True - это Таргет, False - нон таргет. Инфа в последовательности
+    хранится в виде дерева, поэтому используется поиск в глубину (dfs)
+    для поиска таргетов"""
 
     def dfs(feature, target_mask):
         for feature in feature.sub_features:
@@ -42,6 +47,7 @@ def second_model_target_mask(gen_data, target:str):
 
 
 def make_masked_sequence(sequence):
+    """Создает one-hot vector из последовательности"""
     sequence = np.array(sequence)
     letters = ['A', 'C', 'G', 'T']
     masked_sequence = np.array([sequence == letter for letter in letters], dtype=bool)
@@ -53,7 +59,10 @@ def make_masked_sequence(sequence):
     return masked_sequence
 
 
-def target_split(target_mask, slice_len=1000, target_ratio=None):
+def target_split(target_mask, slice_len=1000, len_data=None, target_ratio=None):
+    """Делит данные на слайсы длиной slice_len с разделением по заданной доле
+    target_ratio (таргет/нон таргет) с учетом заданного количества слайсов len_data"""
+
     number_of_slices = len(target_mask) // slice_len
     target_slices = []
     non_target_slices = []
@@ -70,10 +79,42 @@ def target_split(target_mask, slice_len=1000, target_ratio=None):
 
     np.random.shuffle(target_slices)
     np.random.shuffle(non_target_slices)
-    if target_ratio == None:
+    if target_ratio == None and len_data==None:
         # Если на задано соотношение, то выводим как есть
         return target_slices, non_target_slices
     else:
+        # Тут данные делятся по заданному target_ratio с учетом len_data. На данном этапе происходит проверка
+        # на возможность разделения данных с сохранением len_data по заданному target_ratio. Если данные невозможно
+        # поделить с сохранением target_ratio выводится ошибка, где выводится подсказка, какую длину можно задать,
+        # чтобы данные поделились. Но тут я как-то запутался в граничных случаях и может быть какой-то пропустил.
+        if target_ratio == None:
+            target_ratio = len(target_slices) / number_of_slices
+
+        if len_data != None:
+            len_of_target = int(len_data * target_ratio)
+            len_of_non_target = len_data - len_of_target
+            if len_data > len(target_mask)//slice_len:
+                # Случай, когда заданная длина больше всех реальных данных
+                raise ValueError(f"Value of len_data={len_data} is bigger than number of slices={target_mask//slice_len}."\
+                                f"Try to set another len_data value")
+            elif len_of_target > len(target_slices):
+                # Случай, когда при делении с заданным target_ratio нам не хватает данных из таргета
+                right_len_target_slices = len(target_slices)
+                right_len_non_target_slices = int(right_len_target_slices*((1 - target_ratio) / target_ratio))
+                right_len_data = right_len_target_slices + right_len_non_target_slices
+                raise ValueError(f"There is not enough data to split by the set target_ratio={target_ratio}"\
+                                 f"and len_data={len_data}. To save ratio try to set len_data on {right_len_data}")
+            elif len_of_non_target > len(non_target_slices):
+                # Случай, когда при делении с заданным target_ratio нам не хватает данных из нон таргета
+                right_len_non_target_slices = len(non_target_slices)
+                right_len_target_slices = int(right_len_non_target_slices * (target_ratio / (1 - target_ratio)))
+                right_len_data = right_len_target_slices + right_len_non_target_slices
+                raise ValueError(f"There is not enough data to split by the set target_ratio={target_ratio}"\
+                                 f"and len_data={len_data}. To save ratio try to set len_data on {right_len_data}")
+            non_target_slices = non_target_slices[:len_of_non_target]
+            target_slices = target_slices[:len_of_target]
+            return target_slices, non_target_slices
+                
         # Тут данные делятся по заданному target_ratio, функция написана так, чтобы она делила данные
         # с сохранением максимально возможного количества данных. 
         # Находим реальное соотношение классов, если заданное соотношение больше чем реальное,
@@ -92,6 +133,8 @@ def target_split(target_mask, slice_len=1000, target_ratio=None):
     
 
 def make_dataset(masked_sequence, target_mask, target_slices, non_tarter_slices):
+    """Создает конечный датасет со следующими колонками: One-hot вектор, Есть/нет таргета,
+    таргет маска последовательности, количество таргетов в слайсе, начала конец таргетов"""
     df = pd.DataFrame(columns=["Masked sequence", "Y1", "Y2", "Count target", "Start", "End"])
 
     for left, right in target_slices:
@@ -120,13 +163,14 @@ if __name__ == '__main__':
 
     source = config.get('Data' , 'source_name').split()
     target_name = config["Data"]["target_name"]
-    target_ratio = float(config["Data"]["target_ratio"])
+    target_ratio = float(config["Data"]["target_ratio"]) if config["Data"]["target_ratio"] != "None" else None
     slice_len = int(config["Data"]["slice_len"])
+    len_data = int(config["Data"]["len_data"]) if config["Data"]["len_data"] != "None" else None
 
     gen_data = read_data(dir_fasta, dir_gff, source)
     target_mask = second_model_target_mask(gen_data, target_name)
 
-    target_slices, non_target_slices = target_split(target_mask, slice_len=slice_len, target_ratio=target_ratio)
+    target_slices, non_target_slices = target_split(target_mask, slice_len=slice_len, len_data=len_data, target_ratio=target_ratio)
     masked_sequence = make_masked_sequence(gen_data.seq)
     df = make_dataset(masked_sequence, target_mask, target_slices, non_target_slices)
 
