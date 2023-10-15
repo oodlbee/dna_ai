@@ -95,21 +95,21 @@ def target_split(target_mask, slice_len=1000, len_data=None, target_ratio=None):
             len_of_non_target = len_data - len_of_target
             if len_data > len(target_mask)//slice_len:
                 # Случай, когда заданная длина больше всех реальных данных
-                raise ValueError(f"Value of len_data={len_data} is bigger than number of slices={target_mask//slice_len}."\
+                raise ValueError(f"Value of len_data={len_data} is bigger than number of slices={target_mask//slice_len}. "\
                                 f"Try to set another len_data value")
             elif len_of_target > len(target_slices):
                 # Случай, когда при делении с заданным target_ratio нам не хватает данных из таргета
                 right_len_target_slices = len(target_slices)
                 right_len_non_target_slices = int(right_len_target_slices*((1 - target_ratio) / target_ratio))
                 right_len_data = right_len_target_slices + right_len_non_target_slices
-                raise ValueError(f"There is not enough data to split by the set target_ratio={target_ratio}"\
+                raise ValueError(f"There is not enough data to split by the set target_ratio={target_ratio} "\
                                  f"and len_data={len_data}. To save ratio try to set len_data on {right_len_data}")
             elif len_of_non_target > len(non_target_slices):
                 # Случай, когда при делении с заданным target_ratio нам не хватает данных из нон таргета
                 right_len_non_target_slices = len(non_target_slices)
                 right_len_target_slices = int(right_len_non_target_slices * (target_ratio / (1 - target_ratio)))
                 right_len_data = right_len_target_slices + right_len_non_target_slices
-                raise ValueError(f"There is not enough data to split by the set target_ratio={target_ratio}"\
+                raise ValueError(f"There is not enough data to split by the set target_ratio={target_ratio} "\
                                  f"and len_data={len_data}. To save ratio try to set len_data on {right_len_data}")
             non_target_slices = non_target_slices[:len_of_non_target]
             target_slices = target_slices[:len_of_target]
